@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #000;
+      --panel: #050505;
+      --text-main: #f2f2f2;
+      --text-sub: #bfbfbf;
+      --line: #1f1f1f;
+      --warning-bg: rgba(120, 0, 0, 0.82);
+      --debug-bg: rgba(0, 0, 0, 0.86);
+      --tuning-bg: rgba(0, 0, 0, 0.88);
+      --font-main: "Silkscreen", monospace;
+      --highlight: #fff;
+
+      --crt-chromatic-offset: 0px;
+      --crt-blur-radius: 0px;
+      --crt-scanline-opacity: 0;
+      --crt-grid-opacity: 0;
+      --crt-vignette-opacity: 0;
+      --crt-flicker-low: 1;
+      --crt-flicker-high: 1;
+      --crt-flicker-duration: 0.2s;
+      --crt-curvature-scale-x: 1;
+      --crt-curvature-scale-y: 1;
+      --crt-curvature-rotate-x: 0deg;
+      --crt-scanline-gap: 3px;
+      --crt-grid-gap: 3px;
+
+      /* 情報エリアの上下位置調整用 */
+      --info-offset: 0em;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: var(--font-main);
+    }
+
+    body {
+      color: var(--text-main);
+    }
+
+
+/* --- CRT Effect Styles (Modular) --- */
+body.crt-chromatic-enabled {
+  text-shadow:
+    var(--crt-chromatic-offset) 0 0 rgba(255, 0, 0, 0.6),
+    calc(var(--crt-chromatic-offset) * -1) 0 0 rgba(0, 0, 255, 0.6);
+}
+
+body.crt-chromatic-enabled .time-line {
+  text-shadow:
+    0 0 10px rgba(255, 255, 255, 0.05),
+    var(--crt-chromatic-offset) 0 0 rgba(255, 0, 0, 0.6),
+    calc(var(--crt-chromatic-offset) * -1) 0 0 rgba(0, 0, 255, 0.6);
+}
+
+body.crt-blur-enabled .app {
+  filter: blur(var(--crt-blur-radius));
+}
+
+body.crt-curvature-enabled .app {
+  transform: perspective(1400px)
+    scaleX(var(--crt-curvature-scale-x))
+    scaleY(var(--crt-curvature-scale-y))
+    rotateX(var(--crt-curvature-rotate-x));
+  transform-origin: center center;
+  border-radius: 26px;
+  overflow: hidden;
+}
+
+#crtOverlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background:
+    linear-gradient(
+      rgba(18, 16, 16, 0) 50%,
+      rgb(0 0 0 / var(--crt-scanline-opacity)) 50%
+    ),
+    linear-gradient(
+      90deg,
+      rgb(255 0 0 / var(--crt-grid-opacity)),
+      rgb(0 255 0 / calc(var(--crt-grid-opacity) * 0.25)),
+      rgb(0 0 255 / var(--crt-grid-opacity))
+    ),
+    radial-gradient(
+      circle at center,
+      transparent 50%,
+      rgb(0 0 0 / var(--crt-vignette-opacity)) 100%
+    );
+  background-size: 100% var(--crt-scanline-gap), var(--crt-grid-gap) 100%, 100% 100%;
+  opacity: 0.95;
+  will-change: opacity;
+}
+
+body.crt-overlay-enabled #crtOverlay {
+  display: block;
+}
+
+body.crt-flicker-enabled #crtOverlay {
+  animation: crtFlicker var(--crt-flicker-duration) infinite alternate;
+}
+
+@keyframes crtFlicker {
+  0% { opacity: var(--crt-flicker-low); }
+  100% { opacity: var(--crt-flicker-high); }
+}
+/* ------------------------- */
+
+
+    .app {
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+    }
+
+    .media-area {
+      flex: 3.2;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #bgImage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: #000;
+      display: block;
+    }
+
+    .info-area {
+      flex: 1.2;
+      min-height: 0;
+      background: var(--panel);
+      border-top: 2px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5vh 5vw 2.5vh;
+      position: relative;
+      z-index: 2;
+    }
+
+    .info-box {
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 1.5vh;
+      transform: translateY(var(--info-offset));
+      will-change: transform;
+    }
+
+    .main-info {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5vh;
+    }
+
+    .date-line {
+      color: var(--text-sub);
+      font-size: clamp(14px, 2vw, 20px);
+      letter-spacing: 0.14em;
+      line-height: 1.1;
+      text-transform: uppercase;
+      -webkit-font-smoothing: none;
+    }
+
+    .time-line {
+      color: var(--highlight);
+      font-size: clamp(40px, 6.5vw, 80px);
+      line-height: 1;
+      letter-spacing: 0;
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      -webkit-font-smoothing: none;
+      text-shadow: 0 0 10px rgba(255,255,255,0.05);
+    }
+
+    .digit {
+      display: inline-flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 0.72em;
+    }
+
+    .colon-slot {
+      display: inline-flex;
+      justify-content: center;
+      align-items: baseline;
+      width: 0.34em;
+    }
+
+    .colon {
+      display: inline-block;
+      position: relative;
+      top: 0;
+      transform-origin: center;
+      animation: colonBlink 2s steps(1, end) infinite;
+    }
+
+    @keyframes colonBlink {
+      0%   { opacity: 1; }
+      25%  { opacity: 0.5; }
+      50%  { opacity: 0; }
+      75%  { opacity: 0.5; }
+      100% { opacity: 1; }
+    }
+
+.weather-timeline {
+  display: flex;
+  width: 100%;
+  max-width: 650px;
+  gap: 0.8vw;
+  padding: 1.0vh 0 0;
+  margin-top: 0.35vh;
+  border: none;
+  opacity: 0.92;
+}
+
+.timeline-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6vh;
+  border: none;
+  border-radius: 12px;
+  padding: 0.75vh 0.35vw;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.timeline-item:last-child {
+  border-right: none;
+}
+
+.timeline-item.now {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.timeline-item .label {
+  font-size: clamp(10px, 1.2vw, 14px);
+  color: var(--text-sub);
+}
+
+.timeline-item .icon {
+  font-size: clamp(16px, 2.2vw, 24px);
+  display: flex;
+  align-items: center;
+  min-height: 1.2em;
+}
+
+.timeline-item .temp {
+  font-size: clamp(14px, 1.8vw, 20px);
+  color: var(--text-main);
+}
+
+.timeline-item.now .temp {
+  font-weight: bold;
+  color: var(--highlight);
+}
+
+.crt-control-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.crt-effect-row {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 10px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  display: grid;
+  gap: 8px;
+}
+
+.crt-effect-top {
+  display: grid;
+  grid-template-columns: minmax(118px, auto) 1fr;
+  gap: 10px;
+  align-items: center;
+}
+
+.crt-effect-name {
+  font-size: clamp(10px, 1vw, 13px);
+  color: rgba(255, 255, 255, 0.75);
+  line-height: 1.4;
+}
+
+.crt-effect-toggle {
+  min-width: 118px;
+  text-align: center;
+}
+
+.crt-effect-row input[type="range"] {
+  width: 100%;
+}
+
+.crt-effect-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: clamp(10px, 0.95vw, 12px);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.crt-note {
+  font-size: clamp(10px, 0.95vw, 12px);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: 4px;
+}
+
+@media (orientation: portrait) {
+  .weather-timeline {
+    max-width: 90vw;
+    gap: 1.4vw;
+    padding: 1.2vh 0 0;
+  }
+  .crt-effect-top {
+    grid-template-columns: 1fr;
+  }
+  .crt-effect-toggle {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+    .warning {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 60;
+      background: var(--warning-bg);
+      color: #fff;
+      padding: 14px 16px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: clamp(10px, 1.2vw, 14px);
+      line-height: 1.7;
+      display: none;
+      white-space: pre-line;
+      max-width: min(90vw, 760px);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+
+    /* デバッグパネル部分はテキスト選択可能にする */
+    .debug-panel, .tuning-panel, .info-layout-panel {
+      user-select: text;
+    }
+
+    .debug-panel {
+      position: absolute;
+      inset: 3.5vw;
+      z-index: 40;
+      background: var(--debug-bg);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 18px;
+      padding: 18px;
+      display: none;
+      overflow: auto;
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+
+    .debug-header {
+      position: sticky;
+      top: -18px;
+      background: var(--debug-bg);
+      padding-top: 18px;
+      margin-top: -18px;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+      z-index: 10;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .debug-title {
+      font-size: clamp(14px, 1.6vw, 20px);
+      margin-bottom: 12px;
+      color: #fff;
+      letter-spacing: 0.06em;
+    }
+
+    .top-actions, .section-buttons, .tuning-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .debug-header .top-actions {
+      margin-bottom: 0;
+    }
+
+    details.debug-section {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      margin-bottom: 12px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.03);
+    }
+
+    details.debug-section summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      font-size: clamp(11px, 1.15vw, 14px);
+      color: #fff;
+      border-bottom: 1px solid transparent;
+    }
+
+    details.debug-section[open] summary {
+      border-bottom-color: rgba(255,255,255,0.08);
+    }
+
+    details.debug-section summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .section-content {
+      padding: 14px;
+    }
+
+    .debug-grid {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px 14px;
+      font-size: clamp(10px, 1.1vw, 14px);
+      line-height: 1.5;
+      word-break: break-all;
+    }
+
+    .debug-key { color: #9dd3ff; }
+    .debug-value { color: #f1f1f1; }
+
+    .check-result {
+      font-size: clamp(10px, 1.05vw, 13px);
+      line-height: 1.6;
+      white-space: pre-wrap;
+      color: #e8e8e8;
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 12px;
+      max-height: 36vh;
+      overflow: auto;
+    }
+
+    .tuning-panel, .info-layout-panel {
+      position: absolute;
+      z-index: 45;
+      background: var(--tuning-bg);
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+
+    .tuning-panel {
+      top: 0; right: 0; bottom: 0;
+      width: min(280px, 42vw);
+      border-left: 1px solid rgba(255,255,255,0.12);
+      padding: 18px 14px 16px;
+      align-items: center;
+    }
+
+    .info-layout-panel {
+      top: 0; left: 0; right: 0;
+      z-index: 46;
+      border-bottom: 1px solid rgba(255,255,255,0.12);
+      padding: 16px 18px 14px;
+    }
+
+    .info-layout-title,
+    .tuning-title {
+      font-size: clamp(12px, 1.4vw, 18px);
+      color: #fff;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .info-layout-sliders {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      width: 100%;
+    }
+
+    .info-layout-row {
+      display: grid;
+      grid-template-columns: 120px 1fr 72px;
+      gap: 12px;
+      align-items: center;
+      font-size: clamp(11px, 1vw, 13px);
+      color: #fff;
+    }
+
+    .info-layout-row input[type="range"] {
+      width: 100%;
+    }
+
+    .info-layout-actions,
+    .tuning-actions {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .tuning-sliders {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: flex-end;
+      gap: 14px;
+      padding: 8px 4px;
+    }
+
+    .tuning-slider {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tuning-slider-label,
+    .tuning-slider-value {
+      font-size: clamp(10px, 1vw, 12px);
+      color: #fff;
+      text-align: center;
+      line-height: 1.4;
+    }
+
+    .tuning-slider input[type="range"] {
+      -webkit-appearance: slider-vertical;
+      appearance: slider-vertical;
+      writing-mode: bt-lr;
+      width: 28px;
+      height: min(42vh, 280px);
+      background: transparent;
+    }
+
+    .hidden-input {
+      display: none;
+    }
+
+    @media (orientation: portrait) {
+      .media-area { flex: 3.4; }
+      .info-area {
+        flex: 1.05;
+        padding: 2.2vh 4vw 2.6vh;
+      }
+      .date-line { font-size: clamp(15px, 3.4vw, 24px); }
+      .time-line { font-size: clamp(42px, 9.4vw, 82px); }
+      
+      .weather-timeline { max-width: 90vw; padding: 1.5vh 0;}
+      
+      .debug-panel { inset: 12px; }
+      .tuning-panel { width: min(300px, 62vw); }
+      .info-layout-row {
+        grid-template-columns: 98px 1fr 64px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- CRT Overlay Element -->
+  <div id="crtOverlay"></div>
+
+  <div class="app" id="tapSurface">
+    <section class="media-area">
+      <!-- 固定画像を表示 -->
+      <img id="bgImage" alt="Background Title Image" />
+      <div class="warning" id="warningBox"></div>
+
+      <div class="debug-panel" id="debugPanel">
+        <div class="debug-header">
+          <div class="debug-title">DEBUG MODE</div>
+
+          <div class="top-actions">
+            <button id="forceRefreshBtn">REFRESH WEATHER</button>
+            <button id="forceImageBtn">REFRESH IMAGE</button>
+            <button id="closeDebugBtn">CLOSE</button>
+          </div>
+        </div>
+
+        <details class="debug-section" open>
+          <summary>STATUS</summary>
+          <div class="section-content">
+            <div class="debug-grid">
+              <div class="debug-key">pageOrigin</div><div class="debug-value" id="debugPageOrigin">-</div>
+              <div class="debug-key">baseUrl</div><div class="debug-value" id="debugBaseUrl">-</div>
+              <div class="debug-key">season</div><div class="debug-value" id="debugSeason">-</div>
+              <div class="debug-key">weather</div><div class="debug-value" id="debugWeather">-</div>
+              <div class="debug-key">timeOfDay</div><div class="debug-value" id="debugTimeOfDay">-</div>
+              <div class="debug-key">weatherCode</div><div class="debug-value" id="debugWeatherCode">-</div>
+              <div class="debug-key">temp</div><div class="debug-value" id="debugTemperature">-</div>
+              <div class="debug-key">cloudCover</div><div class="debug-value" id="debugCloudCover">-</div>
+              <div class="debug-key">rain</div><div class="debug-value" id="debugRain">-</div>
+              <div class="debug-key">snowfall</div><div class="debug-value" id="debugSnowfall">-</div>
+              <div class="debug-key">isDay</div><div class="debug-value" id="debugIsDay">-</div>
+              <div class="debug-key">currentImage</div><div class="debug-value" id="debugCurrentImage">-</div>
+              <div class="debug-key">targetImage</div><div class="debug-value" id="debugTargetImage">-</div>
+              <div class="debug-key">lastUpdated</div><div class="debug-value" id="debugLastUpdated">-</div>
+              <div class="debug-key">nextUpdateIn</div><div class="debug-value" id="debugNextUpdateIn">-</div>
+              <div class="debug-key">city</div><div class="debug-value" id="debugCity">Shin-Sapporo</div>
+              <div class="debug-key">apiStatus</div><div class="debug-value" id="debugApiStatus">-</div>
+              <div class="debug-key">imageStatus</div><div class="debug-value" id="debugImageStatus">-</div>
+            </div>
+          </div>
+        </details>
+
+        <details class="debug-section">
+          <summary>COLOR TUNING</summary>
+          <div class="section-content">
+            <div class="section-buttons">
+              <button id="openGlobalTuningBtn">GLOBAL</button>
+              <button id="openInfoLayoutBtn">INFO OFFSET</button>
+              <button id="exportSettingsBtn">EXPORT SETTINGS</button>
+              <button id="importSettingsBtn">IMPORT SETTINGS</button>
+            </div>
+            <input class="hidden-input" id="importSettingsInput" type="file" accept="application/json,.json">
+            <div class="check-result" id="settingsResult">No settings action yet.</div>
+          </div>
+        </details>
+
+<details class="debug-section" open>
+  <summary>CRT EFFECTS</summary>
+  <div class="section-content">
+    <div class="section-buttons">
+      <button id="crtAllOnBtn">ALL ON</button>
+      <button id="crtAllOffBtn">ALL OFF</button>
+    </div>
+
+    <div class="crt-control-grid">
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtChromaticToggle" class="crt-effect-toggle">CHROMATIC: OFF</button>
+          <div class="crt-effect-name">色収差 / Chromatic aberration</div>
+        </div>
+        <input id="crtChromaticSlider" type="range" min="0" max="8" step="0.1" value="0">
+        <div class="crt-effect-meta">
+          <span>0px</span>
+          <span id="crtChromaticValue">0.0px</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtBlurToggle" class="crt-effect-toggle">BLUR: OFF</button>
+          <div class="crt-effect-name">全体ぼかし / Global blur</div>
+        </div>
+        <input id="crtBlurSlider" type="range" min="0" max="3" step="0.05" value="0">
+        <div class="crt-effect-meta">
+          <span>0px</span>
+          <span id="crtBlurValue">0.00px</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtScanlineToggle" class="crt-effect-toggle">SCANLINES: OFF</button>
+          <div class="crt-effect-name">走査線 / Scanlines</div>
+        </div>
+        <input id="crtScanlineSlider" type="range" min="0" max="0.6" step="0.01" value="0">
+        <div class="crt-effect-meta">
+          <span>0.00</span>
+          <span id="crtScanlineValue">0.00</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtGridToggle" class="crt-effect-toggle">GRID: OFF</button>
+          <div class="crt-effect-name">蛍光体グリッド / Phosphor grid</div>
+        </div>
+        <input id="crtGridSlider" type="range" min="0" max="0.35" step="0.01" value="0">
+        <div class="crt-effect-meta">
+          <span>0.00</span>
+          <span id="crtGridValue">0.00</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtVignetteToggle" class="crt-effect-toggle">VIGNETTE: OFF</button>
+          <div class="crt-effect-name">周辺減光 / Vignette</div>
+        </div>
+        <input id="crtVignetteSlider" type="range" min="0" max="0.85" step="0.01" value="0">
+        <div class="crt-effect-meta">
+          <span>0.00</span>
+          <span id="crtVignetteValue">0.00</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtFlickerToggle" class="crt-effect-toggle">FLICKER: OFF</button>
+          <div class="crt-effect-name">微妙なちらつき / Flicker</div>
+        </div>
+        <input id="crtFlickerSlider" type="range" min="0" max="0.35" step="0.01" value="0">
+        <div class="crt-effect-meta">
+          <span>0.00</span>
+          <span id="crtFlickerValue">0.00</span>
+        </div>
+      </div>
+
+      <div class="crt-effect-row">
+        <div class="crt-effect-top">
+          <button id="crtCurvatureToggle" class="crt-effect-toggle">CURVATURE: OFF</button>
+          <div class="crt-effect-name">湾曲 / Screen curvature</div>
+        </div>
+        <input id="crtCurvatureSlider" type="range" min="0" max="0.2" step="0.005" value="0">
+        <div class="crt-effect-meta">
+          <span>0.000</span>
+          <span id="crtCurvatureValue">0.000</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="crt-note">最大値は意図的に強めに設定しています。0にすると完全停止、上げるとCRT感が強くなります。</div>
+  </div>
+</details>
+
+      </div>
+
+      <!-- Tuning Panels -->
+      <div class="tuning-panel" id="tuningPanel">
+        <div class="tuning-title" id="tuningTitle">GLOBAL ADJUST</div>
+        <div class="tuning-sliders">
+          <div class="tuning-slider">
+            <div class="tuning-slider-label">B</div>
+            <input id="brightnessSlider" type="range" min="0.50" max="1.50" step="0.01" value="1.00">
+            <div class="tuning-slider-value" id="brightnessValue">1.00</div>
+          </div>
+          <div class="tuning-slider">
+            <div class="tuning-slider-label">S</div>
+            <input id="saturationSlider" type="range" min="0.00" max="2.00" step="0.01" value="1.00">
+            <div class="tuning-slider-value" id="saturationValue">1.00</div>
+          </div>
+          <div class="tuning-slider">
+            <div class="tuning-slider-label">C</div>
+            <input id="contrastSlider" type="range" min="0.70" max="1.30" step="0.01" value="1.00">
+            <div class="tuning-slider-value" id="contrastValue">1.00</div>
+          </div>
+        </div>
+        <div class="tuning-actions">
+          <button id="tuningDoneBtn">DONE</button>
+          <button id="tuningCancelBtn">CANCEL</button>
+        </div>
+      </div>
+
+      <!-- Info Offset Panel -->
+      <div class="info-layout-panel" id="infoLayoutPanel">
+        <div class="info-layout-title">INFO VERTICAL OFFSET</div>
+        <div class="info-layout-sliders">
+          <label class="info-layout-row">
+            <span>OFFSET</span>
+            <input id="infoOffsetSlider" type="range" min="-2.50" max="2.50" step="0.05" value="0.00">
+            <span id="infoOffsetValue">0.00em</span>
+          </label>
+        </div>
+        <div class="info-layout-actions">
+          <button id="infoLayoutDoneBtn">DONE</button>
+          <button id="infoLayoutCancelBtn">CANCEL</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="info-area">
+      <div class="info-box">
+        <div class="main-info">
+          <div class="date-line" id="dateLine">--/-- ---</div>
+          <div class="time-line" aria-label="current time">
+            <span class="digit" id="hourTens">-</span>
+            <span class="digit" id="hourOnes">-</span>
+            <span class="colon-slot"><span class="colon">:</span></span>
+            <span class="digit" id="minuteTens">-</span>
+            <span class="digit" id="minuteOnes">-</span>
+          </div>
+        </div>
+
+        <div class="weather-timeline" id="weatherTimeline">
+          <div class="timeline-item now">
+            <span class="label">NOW</span>
+            <span class="icon" id="nowWeatherIcon">-</span>
+            <span class="temp"><span id="nowTemp">--</span>°</span>
+          </div>
+          <div class="timeline-item">
+            <span class="label">+1H</span>
+            <span class="icon" id="fc1Icon">-</span>
+            <span class="temp"><span id="fc1Temp">--</span>°</span>
+          </div>
+          <div class="timeline-item">
+            <span class="label">+2H</span>
+            <span class="icon" id="fc2Icon">-</span>
+            <span class="temp"><span id="fc2Temp">--</span>°</span>
+          </div>
+          <div class="timeline-item">
+            <span class="label">+3H</span>
+            <span class="icon" id="fc3Icon">-</span>
+            <span class="temp"><span id="fc3Temp">--</span>°</span>
+          </div>
+          <div class="timeline-item">
+            <span class="label">+4H</span>
+            <span class="icon" id="fc4Icon">-</span>
+            <span class="temp"><span id="fc4Temp">--</span>°</span>
+          </div>
+          <div class="timeline-item">
+            <span class="label">+5H</span>
+            <span class="icon" id="fc5Icon">-</span>
+            <span class="temp"><span id="fc5Temp">--</span>°</span>
+          </div>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const CONFIG = {
+      cityName: 'Shin-Sapporo',
+      latitude: 43.0388,
+      longitude: 141.4725,
+      timezone: 'Asia/Tokyo',
+      weatherRetryMs: 60 * 1000,
+      warningDurationMs: 7000,
+      defaultImage: 'Title.png',   // 固定表示する背景画像
+      baseUrl: './',               // 相対パスにしてGitHub Pagesのサブディレクトリに対応
+      imageLoadTimeoutMs: 10000,
+      storageKeySettings: 'weather_dashboard_settings_v3',
+      settingsVersion: 3, 
+      dailyReloadHour: 3,
+      dailyReloadMinute: 0
+    };
+
+    const SEASON_TIME_TABLE = {
+      spring: [
+        { key: 'morning', start: '05:00', end: '08:59' },
+        { key: 'noon',    start: '09:00', end: '15:59' },
+        { key: 'evening', start: '16:00', end: '17:59' },
+        { key: 'night',   start: '18:00', end: '22:59' },
+        { key: 'midnight',start: '23:00', end: '04:59' }
+      ],
+      summer: [
+        { key: 'morning', start: '04:00', end: '08:59' },
+        { key: 'noon',    start: '09:00', end: '16:59' },
+        { key: 'evening', start: '17:00', end: '19:59' },
+        { key: 'night',   start: '20:00', end: '22:59' },
+        { key: 'midnight',start: '23:00', end: '03:59' }
+      ],
+      autumn: [
+        { key: 'morning', start: '05:00', end: '08:59' },
+        { key: 'noon',    start: '09:00', end: '15:59' },
+        { key: 'evening', start: '16:00', end: '17:59' },
+        { key: 'night',   start: '18:00', end: '22:59' },
+        { key: 'midnight',start: '23:00', end: '04:59' }
+      ],
+      winter: [
+        { key: 'morning', start: '06:00', end: '08:59' },
+        { key: 'noon',    start: '09:00', end: '14:59' },
+        { key: 'evening', start: '15:00', end: '16:59' },
+        { key: 'night',   start: '17:00', end: '22:59' },
+        { key: 'midnight',start: '23:00', end: '05:59' }
+      ]
+    };
+
+    const els = {
+      dateLine: document.getElementById('dateLine'),
+      hourTens: document.getElementById('hourTens'),
+      hourOnes: document.getElementById('hourOnes'),
+      minuteTens: document.getElementById('minuteTens'),
+      minuteOnes: document.getElementById('minuteOnes'),
+      
+      nowWeatherIcon: document.getElementById('nowWeatherIcon'),
+      nowTemp: document.getElementById('nowTemp'),
+
+      bgImage: document.getElementById('bgImage'),
+      warningBox: document.getElementById('warningBox'),
+      debugPanel: document.getElementById('debugPanel'),
+      tuningPanel: document.getElementById('tuningPanel'),
+      infoLayoutPanel: document.getElementById('infoLayoutPanel'),
+
+      debugPageOrigin: document.getElementById('debugPageOrigin'),
+      debugBaseUrl: document.getElementById('debugBaseUrl'),
+      debugSeason: document.getElementById('debugSeason'),
+      debugWeather: document.getElementById('debugWeather'),
+      debugTimeOfDay: document.getElementById('debugTimeOfDay'),
+      debugWeatherCode: document.getElementById('debugWeatherCode'),
+      debugTemperature: document.getElementById('debugTemperature'),
+      debugCloudCover: document.getElementById('debugCloudCover'),
+      debugRain: document.getElementById('debugRain'),
+      debugSnowfall: document.getElementById('debugSnowfall'),
+      debugIsDay: document.getElementById('debugIsDay'),
+      debugCurrentImage: document.getElementById('debugCurrentImage'),
+      debugTargetImage: document.getElementById('debugTargetImage'),
+      debugLastUpdated: document.getElementById('debugLastUpdated'),
+      debugNextUpdateIn: document.getElementById('debugNextUpdateIn'),
+      debugCity: document.getElementById('debugCity'),
+      debugApiStatus: document.getElementById('debugApiStatus'),
+      debugImageStatus: document.getElementById('debugImageStatus'),
+
+      settingsResult: document.getElementById('settingsResult'),
+
+      forceRefreshBtn: document.getElementById('forceRefreshBtn'),
+      forceImageBtn: document.getElementById('forceImageBtn'),
+      closeDebugBtn: document.getElementById('closeDebugBtn'),
+
+      openGlobalTuningBtn: document.getElementById('openGlobalTuningBtn'),
+      openInfoLayoutBtn: document.getElementById('openInfoLayoutBtn'),
+
+      exportSettingsBtn: document.getElementById('exportSettingsBtn'),
+      importSettingsBtn: document.getElementById('importSettingsBtn'),
+      importSettingsInput: document.getElementById('importSettingsInput'),
+
+      crtAllOnBtn: document.getElementById('crtAllOnBtn'),
+      crtAllOffBtn: document.getElementById('crtAllOffBtn'),
+      crtChromaticToggle: document.getElementById('crtChromaticToggle'),
+      crtBlurToggle: document.getElementById('crtBlurToggle'),
+      crtScanlineToggle: document.getElementById('crtScanlineToggle'),
+      crtGridToggle: document.getElementById('crtGridToggle'),
+      crtVignetteToggle: document.getElementById('crtVignetteToggle'),
+      crtFlickerToggle: document.getElementById('crtFlickerToggle'),
+      crtCurvatureToggle: document.getElementById('crtCurvatureToggle'),
+
+      crtChromaticSlider: document.getElementById('crtChromaticSlider'),
+      crtBlurSlider: document.getElementById('crtBlurSlider'),
+      crtScanlineSlider: document.getElementById('crtScanlineSlider'),
+      crtGridSlider: document.getElementById('crtGridSlider'),
+      crtVignetteSlider: document.getElementById('crtVignetteSlider'),
+      crtFlickerSlider: document.getElementById('crtFlickerSlider'),
+      crtCurvatureSlider: document.getElementById('crtCurvatureSlider'),
+
+      crtChromaticValue: document.getElementById('crtChromaticValue'),
+      crtBlurValue: document.getElementById('crtBlurValue'),
+      crtScanlineValue: document.getElementById('crtScanlineValue'),
+      crtGridValue: document.getElementById('crtGridValue'),
+      crtVignetteValue: document.getElementById('crtVignetteValue'),
+      crtFlickerValue: document.getElementById('crtFlickerValue'),
+      crtCurvatureValue: document.getElementById('crtCurvatureValue'),
+
+      tuningTitle: document.getElementById('tuningTitle'),
+      brightnessSlider: document.getElementById('brightnessSlider'),
+      saturationSlider: document.getElementById('saturationSlider'),
+      contrastSlider: document.getElementById('contrastSlider'),
+      brightnessValue: document.getElementById('brightnessValue'),
+      saturationValue: document.getElementById('saturationValue'),
+      contrastValue: document.getElementById('contrastValue'),
+      tuningDoneBtn: document.getElementById('tuningDoneBtn'),
+      tuningCancelBtn: document.getElementById('tuningCancelBtn'),
+
+      infoOffsetSlider: document.getElementById('infoOffsetSlider'),
+      infoOffsetValue: document.getElementById('infoOffsetValue'),
+      infoLayoutDoneBtn: document.getElementById('infoLayoutDoneBtn'),
+      infoLayoutCancelBtn: document.getElementById('infoLayoutCancelBtn'),
+
+      tapSurface: document.getElementById('tapSurface')
+    };
+
+    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+    const CRT_EFFECTS = {
+      chromatic: { label: 'CHROMATIC', title: '色収差 / Chromatic aberration', unit: 'px', max: 8 },
+      blur: { label: 'BLUR', title: '全体ぼかし / Global blur', unit: 'px', max: 3 },
+      scanlines: { label: 'SCANLINES', title: '走査線 / Scanlines', unit: '', max: 0.6 },
+      grid: { label: 'GRID', title: '蛍光体グリッド / Phosphor grid', unit: '', max: 0.35 },
+      vignette: { label: 'VIGNETTE', title: '周辺減光 / Vignette', unit: '', max: 0.85 },
+      flicker: { label: 'FLICKER', title: '微妙なちらつき / Flicker', unit: '', max: 0.35 },
+      curvature: { label: 'CURVATURE', title: '湾曲 / Screen curvature', unit: '', max: 0.2 }
+    };
+
+    function makeDefaultAdjustment() {
+      return { brightness: 1.00, saturation: 1.00, contrast: 1.00 };
+    }
+
+    function makeDefaultInfoLayout() {
+      return { infoOffset: 0.00 };
+    }
+
+    function makeDefaultCrtEffect(enabled = false, strength = 0) {
+      return { enabled, strength };
+    }
+
+    function makeDefaultCrtSettings() {
+      return {
+        chromatic: makeDefaultCrtEffect(false, 2.0),
+        blur: makeDefaultCrtEffect(false, 0.8),
+        scanlines: makeDefaultCrtEffect(false, 0.18),
+        grid: makeDefaultCrtEffect(false, 0.08),
+        vignette: makeDefaultCrtEffect(false, 0.45),
+        flicker: makeDefaultCrtEffect(false, 0.08),
+        curvature: makeDefaultCrtEffect(false, 0.04)
+      };
+    }
+
+    function makeDefaultSettings() {
+      return {
+        version: CONFIG.settingsVersion,
+        crt: makeDefaultCrtSettings(),
+        global: makeDefaultAdjustment(),
+        infoLayout: makeDefaultInfoLayout()
+      };
+    }
+
+    function deepClone(obj) {
+      return JSON.parse(JSON.stringify(obj));
+    }
+
+    function normalizeAdjustment(input) {
+      const base = makeDefaultAdjustment();
+      if (!input || typeof input !== 'object') return base;
+      const b = Number(input.brightness);
+      const s = Number(input.saturation);
+      const c = Number(input.contrast);
+      if (!Number.isNaN(b)) base.brightness = b;
+      if (!Number.isNaN(s)) base.saturation = s;
+      if (!Number.isNaN(c)) base.contrast = c;
+      return base;
+    }
+
+    function normalizeInfoLayout(input) {
+      const base = makeDefaultInfoLayout();
+      if (!input || typeof input !== 'object') return base;
+      const o = Number(input.infoOffset);
+      if (!Number.isNaN(o)) base.infoOffset = clamp(o, -2.50, 2.50);
+      return base;
+    }
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function normalizeCrtEffect(input, defaults, maxStrength) {
+      const base = { enabled: defaults.enabled, strength: defaults.strength };
+      if (!input || typeof input !== 'object') return base;
+      base.enabled = Boolean(input.enabled);
+      const strength = Number(input.strength);
+      if (!Number.isNaN(strength)) {
+        base.strength = clamp(strength, 0, maxStrength);
+      }
+      return base;
+    }
+
+    function normalizeCrtSettings(input) {
+      const base = makeDefaultCrtSettings();
+      if (!input || typeof input !== 'object') return base;
+
+      base.chromatic = normalizeCrtEffect(input.chromatic, base.chromatic, CRT_EFFECTS.chromatic.max);
+      base.blur = normalizeCrtEffect(input.blur, base.blur, CRT_EFFECTS.blur.max);
+      base.scanlines = normalizeCrtEffect(input.scanlines, base.scanlines, CRT_EFFECTS.scanlines.max);
+      base.grid = normalizeCrtEffect(input.grid, base.grid, CRT_EFFECTS.grid.max);
+      base.vignette = normalizeCrtEffect(input.vignette, base.vignette, CRT_EFFECTS.vignette.max);
+      base.flicker = normalizeCrtEffect(input.flicker, base.flicker, CRT_EFFECTS.flicker.max);
+      base.curvature = normalizeCrtEffect(input.curvature, base.curvature, CRT_EFFECTS.curvature.max);
+      return base;
+    }
+
+    function normalizeSettings(input) {
+      const base = makeDefaultSettings();
+      if (!input || typeof input !== 'object') return base;
+
+      base.version = Number(input.version) || CONFIG.settingsVersion;
+      base.global = normalizeAdjustment(input.global);
+      base.infoLayout = normalizeInfoLayout(input.infoLayout);
+
+      if (input.crt && typeof input.crt === 'object') {
+        base.crt = normalizeCrtSettings(input.crt);
+      } else if (input.enableCRT) {
+        for (const key of Object.keys(base.crt)) {
+          base.crt[key].enabled = true;
+        }
+      }
+
+      return base;
+    }
+
+    const state = {
+      season: '-',
+      weather: '-',
+      timeOfDay: '-',
+      weatherCode: '-',
+      temperature: null,
+      cloudCover: '-',
+      rain: '-',
+      snowfall: '-',
+      isDay: '-',
+      currentImage: '-',
+      targetImage: '-',
+      lastUpdated: '-',
+      nextUpdateAt: null,
+      apiStatus: 'idle',
+      imageStatus: 'idle',
+      tapTimes: [],
+      debugOpen: false,
+      imageSwitching: false,
+      settings: makeDefaultSettings(),
+
+      tuningOpen: false,
+      tuningMode: null,
+      tuningBackup: null,
+
+      infoLayoutOpen: false,
+      infoLayoutBackup: null,
+
+      weatherFetchTimeoutId: null,
+      dailyReloadTimeoutId: null
+    };
+
+    function pad(num) {
+      return String(num).padStart(2, '0');
+    }
+
+    function formatDate(date) {
+      return `${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${days[date.getDay()]}`;
+    }
+
+    function formatTime(date) {
+      return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    function formatTemperatureNumber(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) {
+        return '--';
+      }
+      return `${Math.round(Number(value))}`;
+    }
+
+    function getSeason(date = new Date()) {
+      const month = date.getMonth() + 1;
+      if (month >= 3 && month <= 5) return 'spring';
+      if (month >= 6 && month <= 8) return 'summer';
+      if (month >= 9 && month <= 11) return 'autumn';
+      return 'winter';
+    }
+
+    function hhmmToMinutes(hhmm) {
+      const [h, m] = hhmm.split(':').map(Number);
+      return h * 60 + m;
+    }
+
+    function inTimeRange(totalMinutes, startHHMM, endHHMM) {
+      const start = hhmmToMinutes(startHHMM);
+      const end = hhmmToMinutes(endHHMM);
+      if (start <= end) {
+        return totalMinutes >= start && totalMinutes <= end;
+      }
+      return totalMinutes >= start || totalMinutes <= end;
+    }
+
+    function getTimeOfDay(date = new Date()) {
+      const season = getSeason(date);
+      const total = date.getHours() * 60 + date.getMinutes();
+      const table = SEASON_TIME_TABLE[season] || SEASON_TIME_TABLE.spring;
+      for (const row of table) {
+        if (inTimeRange(total, row.start, row.end)) {
+          return row.key;
+        }
+      }
+      return 'midnight';
+    }
+
+    function getDetailedWeather(code) {
+      if (code === 0 || code === 1) return 'sunny';
+      if ([2, 3, 45, 48].includes(code)) return 'cloudy';
+      if ([51, 56, 61, 66, 80].includes(code)) return 'rain_light';
+      if ([53, 57, 63, 81].includes(code)) return 'rain_moderate';
+      if ([55, 65, 67, 82].includes(code)) return 'rain_heavy';
+      if ([71, 73, 75, 77, 85, 86].includes(code)) return 'snow';
+      if ([95, 96, 99].includes(code)) return 'storm';
+      return 'cloudy';
+    }
+
+    function getWeatherText(code) {
+      const detail = getDetailedWeather(code);
+      switch (detail) {
+        case 'sunny': return 'SUN';
+        case 'cloudy': return 'CLD';
+        case 'rain_light': return 'RN L';
+        case 'rain_moderate': return 'RN M';
+        case 'rain_heavy': return 'RN H';
+        case 'snow': return 'SNOW';
+        case 'storm': return 'STRM';
+        default: return '---';
+      }
+    }
+
+    function buildFileName() {
+      return CONFIG.defaultImage;
+    }
+
+    function imagePath(fileName) {
+      return CONFIG.baseUrl + fileName;
+    }
+
+    function saveSettingsToStorage() {
+      localStorage.setItem(CONFIG.storageKeySettings, JSON.stringify(state.settings));
+    }
+
+    function loadSettingsFromStorage() {
+      try {
+        let raw = localStorage.getItem(CONFIG.storageKeySettings);
+        if (!raw) {
+          raw = localStorage.getItem('weather_dashboard_settings_v2');
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            state.settings = normalizeSettings(parsed);
+            saveSettingsToStorage();
+            return;
+          }
+        }
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        state.settings = normalizeSettings(parsed);
+      } catch {
+        state.settings = makeDefaultSettings();
+      }
+    }
+
+    function applyInfoLayout() {
+      document.documentElement.style.setProperty(
+        '--info-offset',
+        `${state.settings.infoLayout.infoOffset}em`
+      );
+    }
+
+    function hasActiveCrtEffects() {
+      return Object.values(state.settings.crt).some(effect => effect.enabled);
+    }
+
+    function applyCrtEffects() {
+      const body = document.body.classList;
+      const htmlStyle = document.documentElement.style;
+      const crt = state.settings.crt;
+
+      body.remove(
+        'crt-chromatic-enabled',
+        'crt-blur-enabled',
+        'crt-overlay-enabled',
+        'crt-flicker-enabled',
+        'crt-curvature-enabled'
+      );
+
+      if (crt.chromatic.enabled) body.add('crt-chromatic-enabled');
+      if (crt.blur.enabled) body.add('crt-blur-enabled');
+      if (crt.curvature.enabled) body.add('crt-curvature-enabled');
+      if (crt.scanlines.enabled || crt.grid.enabled || crt.vignette.enabled || crt.flicker.enabled) {
+        body.add('crt-overlay-enabled');
+      }
+      if (crt.flicker.enabled) body.add('crt-flicker-enabled');
+
+      htmlStyle.setProperty('--crt-chromatic-offset', `${crt.chromatic.strength}px`);
+      htmlStyle.setProperty('--crt-blur-radius', `${crt.blur.strength}px`);
+      htmlStyle.setProperty('--crt-scanline-opacity', crt.scanlines.enabled ? String(crt.scanlines.strength) : '0');
+      htmlStyle.setProperty('--crt-grid-opacity', crt.grid.enabled ? String(crt.grid.strength) : '0');
+      htmlStyle.setProperty('--crt-vignette-opacity', crt.vignette.enabled ? String(crt.vignette.strength) : '0');
+
+      const flickerStrength = crt.flicker.enabled ? crt.flicker.strength : 0;
+      const low = clamp(1 - flickerStrength * 0.22, 0.55, 1);
+      const high = 1 + flickerStrength * 0.08;
+      const duration = clamp(0.45 - flickerStrength * 0.8, 0.05, 0.45);
+
+      htmlStyle.setProperty('--crt-flicker-low', low.toFixed(3));
+      htmlStyle.setProperty('--crt-flicker-high', high.toFixed(3));
+      htmlStyle.setProperty('--crt-flicker-duration', `${duration.toFixed(3)}s`);
+
+      const curve = crt.curvature.enabled ? crt.curvature.strength : 0;
+      const scaleX = 1 - curve * 0.26;
+      const scaleY = 1 - curve * 0.16;
+      const rotateX = curve * 10;
+      htmlStyle.setProperty('--crt-curvature-scale-x', scaleX.toFixed(4));
+      htmlStyle.setProperty('--crt-curvature-scale-y', scaleY.toFixed(4));
+      htmlStyle.setProperty('--crt-curvature-rotate-x', `${rotateX.toFixed(3)}deg`);
+    }
+
+    function saveCrtAndRefresh() {
+      saveSettingsToStorage();
+      applyCrtEffects();
+      refreshDebug();
+    }
+
+    function setCrtEffectEnabled(effectKey, enabled) {
+      if (!state.settings.crt[effectKey]) return;
+      state.settings.crt[effectKey].enabled = enabled;
+      saveCrtAndRefresh();
+    }
+
+    function setCrtEffectStrength(effectKey, value) {
+      if (!state.settings.crt[effectKey]) return;
+      state.settings.crt[effectKey].strength = value;
+      saveCrtAndRefresh();
+    }
+
+    function setAllCrtEffects(enabled) {
+      for (const key of Object.keys(state.settings.crt)) {
+        state.settings.crt[key].enabled = enabled;
+      }
+      saveCrtAndRefresh();
+    }
+
+    function setCrtToggleUi(button, enabled, label) {
+      if (button) {
+        button.textContent = `${label}: ${enabled ? 'ON' : 'OFF'}`;
+      }
+    }
+
+    function setCrtValueUi(el, value, unit = '') {
+      if (!el) return;
+      if (unit === 'px') {
+        el.textContent = `${Number(value).toFixed(2)}px`;
+      } else {
+        el.textContent = Number(value).toFixed(3);
+      }
+    }
+
+    function updateCrtControlUi() {
+      const crt = state.settings.crt;
+      setCrtToggleUi(els.crtChromaticToggle, crt.chromatic.enabled, CRT_EFFECTS.chromatic.label);
+      setCrtToggleUi(els.crtBlurToggle, crt.blur.enabled, CRT_EFFECTS.blur.label);
+      setCrtToggleUi(els.crtScanlineToggle, crt.scanlines.enabled, CRT_EFFECTS.scanlines.label);
+      setCrtToggleUi(els.crtGridToggle, crt.grid.enabled, CRT_EFFECTS.grid.label);
+      setCrtToggleUi(els.crtVignetteToggle, crt.vignette.enabled, CRT_EFFECTS.vignette.label);
+      setCrtToggleUi(els.crtFlickerToggle, crt.flicker.enabled, CRT_EFFECTS.flicker.label);
+      setCrtToggleUi(els.crtCurvatureToggle, crt.curvature.enabled, CRT_EFFECTS.curvature.label);
+
+      if (els.crtChromaticSlider) els.crtChromaticSlider.value = crt.chromatic.strength;
+      if (els.crtBlurSlider) els.crtBlurSlider.value = crt.blur.strength;
+      if (els.crtScanlineSlider) els.crtScanlineSlider.value = crt.scanlines.strength;
+      if (els.crtGridSlider) els.crtGridSlider.value = crt.grid.strength;
+      if (els.crtVignetteSlider) els.crtVignetteSlider.value = crt.vignette.strength;
+      if (els.crtFlickerSlider) els.crtFlickerSlider.value = crt.flicker.strength;
+      if (els.crtCurvatureSlider) els.crtCurvatureSlider.value = crt.curvature.strength;
+
+      setCrtValueUi(els.crtChromaticValue, crt.chromatic.strength, 'px');
+      setCrtValueUi(els.crtBlurValue, crt.blur.strength, 'px');
+      setCrtValueUi(els.crtScanlineValue, crt.scanlines.strength);
+      setCrtValueUi(els.crtGridValue, crt.grid.strength);
+      setCrtValueUi(els.crtVignetteValue, crt.vignette.strength);
+      setCrtValueUi(els.crtFlickerValue, crt.flicker.strength);
+      setCrtValueUi(els.crtCurvatureValue, crt.curvature.strength);
+
+      if (els.crtAllOnBtn) {
+        els.crtAllOnBtn.textContent = hasActiveCrtEffects() ? 'ALL ON (ACTIVE)' : 'ALL ON';
+      }
+    }
+
+    function applyImageFilter() {
+      const globalAdj = state.settings.global;
+      const finalBrightness = globalAdj.brightness;
+      const finalSaturation = globalAdj.saturation;
+      const finalContrast = globalAdj.contrast;
+
+      els.bgImage.style.filter =
+        `brightness(${finalBrightness}) saturate(${finalSaturation}) contrast(${finalContrast})`;
+    }
+
+    function setSettingsResult(text) {
+      els.settingsResult.textContent = text;
+    }
+
+    let warningTimer = null;
+    function showWarning(message, persist = false) {
+      els.warningBox.style.display = 'block';
+      els.warningBox.textContent = message;
+      if (warningTimer) clearTimeout(warningTimer);
+      if (!persist) {
+        warningTimer = setTimeout(() => {
+          els.warningBox.style.display = 'none';
+        }, CONFIG.warningDurationMs);
+      }
+    }
+
+    function hideWarning() {
+      els.warningBox.style.display = 'none';
+      if (warningTimer) clearTimeout(warningTimer);
+    }
+
+    async function canFetchFile(fileName) {
+      try {
+        const res = await fetch(imagePath(fileName), { method: 'HEAD', cache: 'no-store' });
+        return res.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async function waitForImageLoad(img) {
+      await new Promise((resolve, reject) => {
+        if (img.complete && img.naturalWidth !== 0) {
+          resolve();
+          return;
+        }
+        const timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new Error('image load timeout'));
+        }, CONFIG.imageLoadTimeoutMs);
+        const onLoad = () => { cleanup(); resolve(); };
+        const onError = () => { cleanup(); reject(new Error('image load error')); };
+        function cleanup() {
+          clearTimeout(timeoutId);
+          img.removeEventListener('load', onLoad);
+          img.removeEventListener('error', onError);
+        }
+        img.addEventListener('load', onLoad, { once: true });
+        img.addEventListener('error', onError, { once: true });
+      });
+    }
+
+    async function setImage(fileName) {
+      const src = imagePath(fileName);
+      try {
+        els.bgImage.src = src;
+        await waitForImageLoad(els.bgImage);
+        applyImageFilter();
+        state.currentImage = fileName;
+        state.imageStatus = 'ok';
+        refreshDebug();
+        return true;
+      } catch (err) {
+        const error = new Error(err.message || 'image switch failed');
+        error.name = err.name || 'ImageError';
+        throw error;
+      }
+    }
+
+    async function applyImageForCurrentState(force = false) {
+      if (state.imageSwitching) return;
+
+      state.imageSwitching = true;
+      const targetFile = buildFileName();
+      state.targetImage = targetFile;
+
+      try {
+        if (!force && state.currentImage === targetFile) {
+          hideWarning();
+          state.imageStatus = 'ok';
+          applyImageFilter();
+          return;
+        }
+        try {
+          await setImage(targetFile);
+          hideWarning();
+          return;
+        } catch (err) {
+          const exists = await canFetchFile(targetFile);
+          if (!exists) {
+            state.imageStatus = 'missing';
+            showWarning(`MISSING IMAGE\n${targetFile}`, true);
+          } else {
+            state.imageStatus = `error: ${err.name || '-'} / ${err.message || '-'}`;
+            showWarning(`IMAGE SWITCH ERROR\n${targetFile}\nname: ${err.name || '-'}\nmessage: ${err.message || '-'}`, true);
+          }
+        }
+      } finally {
+        state.imageSwitching = false;
+        refreshDebug();
+      }
+    }
+
+    function scheduleNextFetch(delayMs) {
+      if (state.weatherFetchTimeoutId) {
+        clearTimeout(state.weatherFetchTimeoutId);
+      }
+
+      const now = new Date();
+      let delay = delayMs;
+      let next = new Date(now.getTime() + delayMs);
+
+      if (delayMs === undefined) {
+        next = new Date(now);
+        next.setHours(now.getHours() + 1, 0, 0, 0);
+        delay = next.getTime() - now.getTime();
+      }
+
+      state.nextUpdateAt = next.getTime();
+      refreshDebug();
+
+      state.weatherFetchTimeoutId = setTimeout(() => {
+        fetchWeather();
+      }, delay);
+    }
+
+    function getHourlyIndex(hourlyTimes) {
+      const now = new Date();
+      const YYYY = now.getFullYear();
+      const MM = pad(now.getMonth() + 1);
+      const DD = pad(now.getDate());
+      const HH = pad(now.getHours());
+      const nowStr = `${YYYY}-${MM}-${DD}T${HH}:00`;
+      
+      const exactIdx = hourlyTimes.indexOf(nowStr);
+      if (exactIdx !== -1) return exactIdx;
+      
+      const nowMs = now.getTime();
+      let minDiff = Infinity;
+      let closest = 0;
+      for (let i = 0; i < hourlyTimes.length; i++) {
+        const t = new Date(hourlyTimes[i].replace('T', ' ')).getTime();
+        const diff = Math.abs(t - nowMs);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = i;
+        }
+      }
+      return closest;
+    }
+
+    async function fetchWeather() {
+      state.apiStatus = 'loading';
+      refreshDebug();
+
+      const url =
+        `https://api.open-meteo.com/v1/jma?latitude=${CONFIG.latitude}` +
+        `&longitude=${CONFIG.longitude}` +
+        `&current=temperature_2m,weather_code,cloud_cover,rain,snowfall,is_day` +
+        `&hourly=temperature_2m,weather_code` +
+        `&timezone=${encodeURIComponent(CONFIG.timezone)}` +
+        `&cell_selection=land`;
+
+      try {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        const current = data.current;
+        const code = current.weather_code;
+
+        state.weatherCode = code;
+        state.weather = getDetailedWeather(code);
+        state.temperature = current.temperature_2m;
+        state.cloudCover = current.cloud_cover;
+        state.rain = current.rain;
+        state.snowfall = current.snowfall;
+        state.isDay = current.is_day;
+        state.season = getSeason(new Date());
+        state.timeOfDay = getTimeOfDay(new Date());
+        state.lastUpdated = formatTime(new Date());
+        state.apiStatus = 'ok';
+
+        els.nowWeatherIcon.textContent = getWeatherText(code);
+        els.nowTemp.textContent = formatTemperatureNumber(state.temperature);
+
+        if (data.hourly && data.hourly.time) {
+          const startIndex = getHourlyIndex(data.hourly.time);
+          for (let i = 1; i <= 5; i++) {
+            const idx = startIndex + i;
+            const iconEl = document.getElementById(`fc${i}Icon`);
+            const tempEl = document.getElementById(`fc${i}Temp`);
+            if (iconEl && tempEl) {
+              if (idx < data.hourly.time.length) {
+                iconEl.textContent = getWeatherText(data.hourly.weather_code[idx]);
+                tempEl.textContent = formatTemperatureNumber(data.hourly.temperature_2m[idx]);
+              } else {
+                iconEl.textContent = '---';
+                tempEl.textContent = '--';
+              }
+            }
+          }
+        }
+
+        await applyImageForCurrentState(false);
+        scheduleNextFetch();
+      } catch (err) {
+        state.apiStatus = `api error: ${err.message}`;
+        state.lastUpdated = formatTime(new Date());
+        showWarning(`API ERROR\nRetrying in 1 min`);
+        refreshDebug();
+        scheduleNextFetch(CONFIG.weatherRetryMs);
+      } finally {
+        refreshDebug();
+      }
+    }
+
+    function updateClock() {
+      const now = new Date();
+      els.dateLine.textContent = formatDate(now);
+
+      const hourText = pad(now.getHours());
+      const minuteText = pad(now.getMinutes());
+      els.hourTens.textContent = hourText[0];
+      els.hourOnes.textContent = hourText[1];
+      els.minuteTens.textContent = minuteText[0];
+      els.minuteOnes.textContent = minuteText[1];
+
+      state.timeOfDay = getTimeOfDay(now);
+      state.season = getSeason(now);
+
+      applyImageFilter();
+      refreshDebug();
+    }
+
+    function scheduleClockUpdates() {
+      updateClock();
+      const now = new Date();
+      const msUntilNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+      setTimeout(() => {
+        updateClock();
+        setInterval(updateClock, 60 * 1000);
+      }, msUntilNextMinute);
+    }
+
+    function scheduleDailyReload(hour = 3, minute = 0) {
+      if (state.dailyReloadTimeoutId) {
+        clearTimeout(state.dailyReloadTimeoutId);
+      }
+      const now = new Date();
+      const next = new Date();
+      next.setHours(hour, minute, 0, 0);
+      if (next <= now) next.setDate(next.getDate() + 1);
+      const delay = next.getTime() - now.getTime();
+      state.dailyReloadTimeoutId = setTimeout(() => location.reload(), delay);
+    }
+
+    function startWeatherLoop() {
+      fetchWeather();
+      setInterval(refreshDebug, 1000);
+    }
+
+    function refreshDebug() {
+      els.debugPageOrigin.textContent = window.location.origin || '(none)';
+      els.debugBaseUrl.textContent = CONFIG.baseUrl;
+      els.debugSeason.textContent = state.season;
+      els.debugWeather.textContent = state.weather;
+      els.debugTimeOfDay.textContent = state.timeOfDay;
+      els.debugWeatherCode.textContent = state.weatherCode;
+      els.debugTemperature.textContent = `${formatTemperatureNumber(state.temperature)}°C`;
+      els.debugCloudCover.textContent = state.cloudCover;
+      els.debugRain.textContent = state.rain;
+      els.debugSnowfall.textContent = state.snowfall;
+      els.debugIsDay.textContent = state.isDay;
+      els.debugCurrentImage.textContent = state.currentImage;
+      els.debugTargetImage.textContent = state.targetImage;
+      els.debugLastUpdated.textContent = state.lastUpdated;
+      els.debugCity.textContent = CONFIG.cityName;
+      els.debugApiStatus.textContent = state.apiStatus;
+      els.debugImageStatus.textContent = state.imageStatus;
+
+      if (!state.nextUpdateAt) {
+        els.debugNextUpdateIn.textContent = '-';
+      } else {
+        const remain = Math.max(0, Math.ceil((state.nextUpdateAt - Date.now()) / 1000));
+        const mm = Math.floor(remain / 60);
+        const ss = remain % 60;
+        els.debugNextUpdateIn.textContent = `${mm}:${pad(ss)}`;
+      }
+
+      if (state.tuningOpen) {
+        const target = getTuningTarget();
+        els.brightnessSlider.value = Number(target.brightness).toFixed(2);
+        els.saturationSlider.value = Number(target.saturation).toFixed(2);
+        els.contrastSlider.value = Number(target.contrast).toFixed(2);
+        els.brightnessValue.textContent = Number(target.brightness).toFixed(2);
+        els.saturationValue.textContent = Number(target.saturation).toFixed(2);
+        els.contrastValue.textContent = Number(target.contrast).toFixed(2);
+      }
+
+      if (state.infoLayoutOpen) {
+        const offset = state.settings.infoLayout.infoOffset;
+        els.infoOffsetSlider.value = Number(offset).toFixed(2);
+        els.infoOffsetValue.textContent = `${Number(offset).toFixed(2)}em`;
+      }
+
+      updateCrtControlUi();
+    }
+
+    function toggleDebug() {
+      state.debugOpen = !state.debugOpen;
+      if (state.debugOpen) {
+        els.debugPanel.style.display = 'block';
+      } else {
+        els.debugPanel.style.display = 'none';
+        closeTuningPanel(false);
+        closeInfoLayoutPanel(false);
+      }
+      refreshDebug();
+    }
+
+    function handleTap() {
+      const now = Date.now();
+      state.tapTimes.push(now);
+      state.tapTimes = state.tapTimes.filter((t) => now - t <= 2000);
+      if (state.tapTimes.length >= 6) {
+        state.tapTimes = [];
+        toggleDebug();
+      }
+    }
+
+    function getTuningTarget() {
+      return state.settings.global;
+    }
+
+    function openTuningPanel(mode = 'global') {
+      state.tuningMode = mode;
+      state.tuningBackup = deepClone(state.settings);
+      state.tuningOpen = true;
+
+      els.tuningTitle.textContent = 'GLOBAL ADJUST';
+
+      els.debugPanel.style.display = 'none';
+      els.infoLayoutPanel.style.display = 'none';
+      els.tuningPanel.style.display = 'flex';
+      refreshDebug();
+    }
+
+    function closeTuningPanel(showDebugAgain) {
+      state.tuningOpen = false;
+      state.tuningMode = null;
+      state.tuningBackup = null;
+      els.tuningPanel.style.display = 'none';
+      if (showDebugAgain && state.debugOpen) {
+        els.debugPanel.style.display = 'block';
+      }
+    }
+
+    function cancelTuning() {
+      if (state.tuningBackup) state.settings = deepClone(state.tuningBackup);
+      applyImageFilter();
+      applyInfoLayout();
+      closeTuningPanel(true);
+      refreshDebug();
+    }
+
+    function doneTuning() {
+      saveSettingsToStorage();
+      applyImageFilter();
+      applyInfoLayout();
+      closeTuningPanel(true);
+      setSettingsResult(`Saved at ${new Date().toLocaleTimeString()}`);
+      refreshDebug();
+    }
+
+    function openInfoLayoutPanel() {
+      state.infoLayoutBackup = deepClone(state.settings.infoLayout);
+      state.infoLayoutOpen = true;
+      els.debugPanel.style.display = 'none';
+      els.tuningPanel.style.display = 'none';
+      els.infoLayoutPanel.style.display = 'flex';
+      refreshDebug();
+    }
+
+    function closeInfoLayoutPanel(showDebugAgain) {
+      state.infoLayoutOpen = false;
+      state.infoLayoutBackup = null;
+      els.infoLayoutPanel.style.display = 'none';
+      if (showDebugAgain && state.debugOpen) {
+        els.debugPanel.style.display = 'block';
+      }
+    }
+
+    function cancelInfoLayout() {
+      if (state.infoLayoutBackup) {
+        state.settings.infoLayout = deepClone(state.infoLayoutBackup);
+      }
+      applyInfoLayout();
+      closeInfoLayoutPanel(true);
+      refreshDebug();
+    }
+
+    function doneInfoLayout() {
+      saveSettingsToStorage();
+      applyInfoLayout();
+      closeInfoLayoutPanel(true);
+      setSettingsResult(`Info layout saved at ${new Date().toLocaleTimeString()}`);
+      refreshDebug();
+    }
+
+    function exportSettings() {
+      const payload = {
+        version: CONFIG.settingsVersion,
+        exportedAt: new Date().toISOString(),
+        crt: state.settings.crt,
+        global: state.settings.global,
+        infoLayout: state.settings.infoLayout
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `weather-dashboard-settings-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSettingsResult(`Exported at ${new Date().toLocaleTimeString()}`);
+    }
+
+    async function importSettingsFromFile(file) {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const normalized = normalizeSettings(parsed);
+
+      state.settings = normalized;
+      saveSettingsToStorage();
+      applyImageFilter();
+      applyInfoLayout();
+      applyCrtEffects(); 
+      refreshDebug();
+      setSettingsResult(`Imported at ${new Date().toLocaleTimeString()}`);
+    }
+
+    function bindEvents() {
+      els.tapSurface.addEventListener('pointerdown', handleTap);
+      els.debugPanel.addEventListener('pointerdown', e => e.stopPropagation());
+      els.tuningPanel.addEventListener('pointerdown', e => e.stopPropagation());
+      els.infoLayoutPanel.addEventListener('pointerdown', e => e.stopPropagation());
+
+      els.forceRefreshBtn.addEventListener('click', () => {
+        if (state.weatherFetchTimeoutId) clearTimeout(state.weatherFetchTimeoutId);
+        fetchWeather();
+      });
+
+      els.forceImageBtn.addEventListener('click', () => {
+        applyImageForCurrentState(true).catch((err) => {
+          state.imageStatus = `error: ${err.message}`;
+          showWarning(`IMAGE SWITCH ERROR\n${err.message}`, true);
+        });
+      });
+
+      els.closeDebugBtn.addEventListener('click', () => {
+        state.debugOpen = false;
+        els.debugPanel.style.display = 'none';
+        closeTuningPanel(false);
+        closeInfoLayoutPanel(false);
+      });
+
+      els.openGlobalTuningBtn.addEventListener('click', () => openTuningPanel('global'));
+      els.openInfoLayoutBtn.addEventListener('click', () => openInfoLayoutPanel());
+      els.exportSettingsBtn.addEventListener('click', exportSettings);
+
+      els.importSettingsBtn.addEventListener('click', () => {
+        els.importSettingsInput.value = '';
+        els.importSettingsInput.click();
+      });
+
+      els.importSettingsInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          await importSettingsFromFile(file);
+        } catch (err) {
+          setSettingsResult(`Import failed: ${err.message}`);
+          showWarning(`IMPORT ERROR\n${err.message}`, true);
+        }
+      });
+
+      els.brightnessSlider.addEventListener('input', () => {
+        const target = getTuningTarget();
+        target.brightness = parseFloat(els.brightnessSlider.value);
+        els.brightnessValue.textContent = target.brightness.toFixed(2);
+        applyImageFilter();
+      });
+
+      els.saturationSlider.addEventListener('input', () => {
+        const target = getTuningTarget();
+        target.saturation = parseFloat(els.saturationSlider.value);
+        els.saturationValue.textContent = target.saturation.toFixed(2);
+        applyImageFilter();
+      });
+
+      els.contrastSlider.addEventListener('input', () => {
+        const target = getTuningTarget();
+        target.contrast = parseFloat(els.contrastSlider.value);
+        els.contrastValue.textContent = target.contrast.toFixed(2);
+        applyImageFilter();
+      });
+
+      els.tuningDoneBtn.addEventListener('click', doneTuning);
+      els.tuningCancelBtn.addEventListener('click', cancelTuning);
+
+      els.infoOffsetSlider.addEventListener('input', () => {
+        state.settings.infoLayout.infoOffset = parseFloat(els.infoOffsetSlider.value);
+        applyInfoLayout();
+        refreshDebug();
+      });
+
+      els.infoLayoutDoneBtn.addEventListener('click', doneInfoLayout);
+      els.infoLayoutCancelBtn.addEventListener('click', cancelInfoLayout);
+
+      els.crtAllOnBtn.addEventListener('click', () => setAllCrtEffects(true));
+      els.crtAllOffBtn.addEventListener('click', () => setAllCrtEffects(false));
+
+      els.crtChromaticToggle.addEventListener('click', () => setCrtEffectEnabled('chromatic', !state.settings.crt.chromatic.enabled));
+      els.crtBlurToggle.addEventListener('click', () => setCrtEffectEnabled('blur', !state.settings.crt.blur.enabled));
+      els.crtScanlineToggle.addEventListener('click', () => setCrtEffectEnabled('scanlines', !state.settings.crt.scanlines.enabled));
+      els.crtGridToggle.addEventListener('click', () => setCrtEffectEnabled('grid', !state.settings.crt.grid.enabled));
+      els.crtVignetteToggle.addEventListener('click', () => setCrtEffectEnabled('vignette', !state.settings.crt.vignette.enabled));
+      els.crtFlickerToggle.addEventListener('click', () => setCrtEffectEnabled('flicker', !state.settings.crt.flicker.enabled));
+      els.crtCurvatureToggle.addEventListener('click', () => setCrtEffectEnabled('curvature', !state.settings.crt.curvature.enabled));
+
+      els.crtChromaticSlider.addEventListener('input', () => setCrtEffectStrength('chromatic', parseFloat(els.crtChromaticSlider.value)));
+      els.crtBlurSlider.addEventListener('input', () => setCrtEffectStrength('blur', parseFloat(els.crtBlurSlider.value)));
+      els.crtScanlineSlider.addEventListener('input', () => setCrtEffectStrength('scanlines', parseFloat(els.crtScanlineSlider.value)));
+      els.crtGridSlider.addEventListener('input', () => setCrtEffectStrength('grid', parseFloat(els.crtGridSlider.value)));
+      els.crtVignetteSlider.addEventListener('input', () => setCrtEffectStrength('vignette', parseFloat(els.crtVignetteSlider.value)));
+      els.crtFlickerSlider.addEventListener('input', () => setCrtEffectStrength('flicker', parseFloat(els.crtFlickerSlider.value)));
+      els.crtCurvatureSlider.addEventListener('input', () => setCrtEffectStrength('curvature', parseFloat(els.crtCurvatureSlider.value)));
+
+      els.bgImage.addEventListener('error', () => {
+        state.imageStatus = 'image element error';
+        showWarning(`IMAGE ELEMENT ERROR\n${state.currentImage || '(unknown)'}`, true);
+        refreshDebug();
+      });
+    }
+
+    function init() {
+      loadSettingsFromStorage();
+      applyImageFilter();
+      applyInfoLayout();
+      applyCrtEffects(); 
+      scheduleClockUpdates();
+      scheduleDailyReload(CONFIG.dailyReloadHour, CONFIG.dailyReloadMinute);
+      bindEvents();
+      refreshDebug();
+      startWeatherLoop();
+    }
+
+    init();
+  </script>
+</body>
+</html>
