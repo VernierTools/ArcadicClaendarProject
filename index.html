@@ -155,8 +155,7 @@ body.crt-flicker-enabled #crtOverlay {
     .info-area {
       flex: 1.2;
       min-height: 0;
-      background: var(--panel);
-      border-top: 2px solid var(--line);
+      background: var(--bg);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -256,7 +255,7 @@ body.crt-flicker-enabled #crtOverlay {
   border: none;
   border-radius: 12px;
   padding: 0.75vh 0.35vw;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--panel);
 }
 
 .timeline-item:last-child {
@@ -540,6 +539,42 @@ body.crt-flicker-enabled #crtOverlay {
       justify-content: center;
     }
 
+    .tuning-scope-row {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+    }
+
+    .tuning-scope-label {
+      font-size: clamp(10px, 1vw, 12px);
+      color: rgba(255, 255, 255, 0.7);
+      text-align: center;
+      letter-spacing: 0.06em;
+      line-height: 1.4;
+    }
+
+    .tuning-scope-buttons {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .tuning-scope-btn {
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+      opacity: 0.55;
+    }
+
+    .tuning-scope-btn.is-active {
+      opacity: 1;
+      font-weight: bold;
+      text-decoration: underline;
+    }
+
     .tuning-sliders {
       flex: 1;
       width: 100%;
@@ -763,6 +798,13 @@ body.crt-flicker-enabled #crtOverlay {
       <!-- Tuning Panels -->
       <div class="tuning-panel" id="tuningPanel">
         <div class="tuning-title" id="tuningTitle">GLOBAL ADJUST</div>
+        <div class="tuning-scope-row">
+          <div class="tuning-scope-label">適用範囲 / SCOPE</div>
+          <div class="tuning-scope-buttons">
+            <button id="scopeTextBtn" class="tuning-scope-btn">TEXT<br>(文字のみ)</button>
+            <button id="scopeScreenBtn" class="tuning-scope-btn">SCREEN<br>(画面全体)</button>
+          </div>
+        </div>
         <div class="tuning-sliders">
           <div class="tuning-slider">
             <div class="tuning-slider-label">B</div>
@@ -804,7 +846,7 @@ body.crt-flicker-enabled #crtOverlay {
     </section>
 
     <section class="info-area">
-      <div class="info-box">
+      <div class="info-box" id="infoBox">
         <div class="main-info">
           <div class="date-line" id="dateLine">--/-- ---</div>
           <div class="time-line" aria-label="current time">
@@ -979,6 +1021,9 @@ body.crt-flicker-enabled #crtOverlay {
       brightnessSlider: document.getElementById('brightnessSlider'),
       saturationSlider: document.getElementById('saturationSlider'),
       contrastSlider: document.getElementById('contrastSlider'),
+      scopeTextBtn: document.getElementById('scopeTextBtn'),
+      scopeScreenBtn: document.getElementById('scopeScreenBtn'),
+      infoBox: document.getElementById('infoBox'),
       brightnessValue: document.getElementById('brightnessValue'),
       saturationValue: document.getElementById('saturationValue'),
       contrastValue: document.getElementById('contrastValue'),
@@ -1006,7 +1051,7 @@ body.crt-flicker-enabled #crtOverlay {
     };
 
     function makeDefaultAdjustment() {
-      return { brightness: 1.00, saturation: 1.00, contrast: 1.00 };
+      return { brightness: 1.00, saturation: 1.00, contrast: 1.00, scope: 'screen' };
     }
 
     function makeDefaultInfoLayout() {
@@ -1051,6 +1096,7 @@ body.crt-flicker-enabled #crtOverlay {
       if (!Number.isNaN(b)) base.brightness = b;
       if (!Number.isNaN(s)) base.saturation = s;
       if (!Number.isNaN(c)) base.contrast = c;
+      base.scope = input.scope === 'text' ? 'text' : 'screen';
       return base;
     }
 
@@ -1384,9 +1430,31 @@ body.crt-flicker-enabled #crtOverlay {
       const finalBrightness = globalAdj.brightness;
       const finalSaturation = globalAdj.saturation;
       const finalContrast = globalAdj.contrast;
-
-      els.bgImage.style.filter =
+      const filterStr =
         `brightness(${finalBrightness}) saturate(${finalSaturation}) contrast(${finalContrast})`;
+
+      // 湾曲・チラつき・周辺減光（curvature / flicker / vignette）は
+      // .app / #crtOverlay に別途適用されるため、常に画面全体に効く。
+      // ここで切り替えるのは 明るさ・彩度・コントラストの適用範囲のみ。
+      if (globalAdj.scope === 'text') {
+        els.bgImage.style.filter = '';
+        if (els.infoBox) els.infoBox.style.filter = filterStr;
+      } else {
+        els.bgImage.style.filter = filterStr;
+        if (els.infoBox) els.infoBox.style.filter = filterStr;
+      }
+    }
+
+    function setFilterScope(scope) {
+      state.settings.global.scope = scope === 'text' ? 'text' : 'screen';
+      applyImageFilter();
+      updateScopeUi();
+    }
+
+    function updateScopeUi() {
+      const scope = state.settings.global.scope === 'text' ? 'text' : 'screen';
+      if (els.scopeTextBtn) els.scopeTextBtn.classList.toggle('is-active', scope === 'text');
+      if (els.scopeScreenBtn) els.scopeScreenBtn.classList.toggle('is-active', scope === 'screen');
     }
 
     function setSettingsResult(text) {
@@ -1687,6 +1755,7 @@ body.crt-flicker-enabled #crtOverlay {
         els.brightnessValue.textContent = Number(target.brightness).toFixed(2);
         els.saturationValue.textContent = Number(target.saturation).toFixed(2);
         els.contrastValue.textContent = Number(target.contrast).toFixed(2);
+        updateScopeUi();
       }
 
       if (state.infoLayoutOpen) {
@@ -1902,6 +1971,9 @@ body.crt-flicker-enabled #crtOverlay {
       els.tuningDoneBtn.addEventListener('click', doneTuning);
       els.tuningCancelBtn.addEventListener('click', cancelTuning);
 
+      els.scopeTextBtn.addEventListener('click', () => setFilterScope('text'));
+      els.scopeScreenBtn.addEventListener('click', () => setFilterScope('screen'));
+
       els.infoOffsetSlider.addEventListener('input', () => {
         state.settings.infoLayout.infoOffset = parseFloat(els.infoOffsetSlider.value);
         applyInfoLayout();
@@ -1940,6 +2012,7 @@ body.crt-flicker-enabled #crtOverlay {
     function init() {
       loadSettingsFromStorage();
       applyImageFilter();
+      updateScopeUi();
       applyInfoLayout();
       applyCrtEffects(); 
       scheduleClockUpdates();
